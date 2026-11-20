@@ -2,79 +2,483 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quick Snippet Launcher</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #1e1e1e; color: #f0f0f0; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
-    input, textarea { width: 100%; box-sizing: border-box; background: #2d2d2d; color: #fff; border: 1px solid #444; padding: 10px; border-radius: 6px; font-size: 1rem; margin-bottom: 10px; }
-    input:focus { outline: 2px solid #0078d4; border-color: transparent; }
-    .snippet { background: #252526; border: 1px solid #3c3c3c; padding: 12px; border-radius: 6px; margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-    .snippet.active { border-color: #0078d4; background: #2a2d2e; }
-    .tag { background: #0078d4; color: #fff; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-right: 8px; }
-    .toast { position: fixed; bottom: 20px; right: 20px; background: #107c10; color: white; padding: 10px 18px; border-radius: 6px; display: none; font-weight: bold; }
-    details { margin-top: 2rem; border-top: 1px solid #333; padding-top: 1rem; }
-    button { background: #0078d4; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    :root {
+      --bg: #18181b;
+      --surface: #27272a;
+      --surface-hover: #323238;
+      --border: #3f3f46;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --success: #16a34a;
+      --danger: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      max-width: 820px;
+      margin: 1.5rem auto;
+      padding: 0 1rem 4rem;
+      line-height: 1.4;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    h1 { font-size: 1.2rem; margin: 0; font-weight: 600; color: var(--text); }
+    .hint { font-size: 0.8rem; color: var(--muted); }
+    kbd {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 0.75rem;
+      font-family: monospace;
+    }
+
+    /* Search & Category Bar */
+    .search-box {
+      width: 100%;
+      background: var(--surface);
+      color: var(--text);
+      border: 2px solid var(--border);
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 1.05rem;
+      margin-bottom: 10px;
+    }
+    .search-box:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .categories {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .cat-pill {
+      background: var(--surface);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .cat-pill.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Snippet Cards */
+    .snippet {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      transition: border-color 0.1s, background 0.1s;
+    }
+    .snippet:hover { background: var(--surface-hover); }
+    .snippet.selected {
+      border-color: var(--accent);
+      background: #1e293b;
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .snippet-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .tag-trigger {
+      background: var(--accent);
+      color: #fff;
+      font-family: monospace;
+      font-size: 0.8rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .tag-cat {
+      background: #3f3f46;
+      color: #e4e4e7;
+      font-size: 0.72rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .snippet-body {
+      color: var(--muted);
+      font-size: 0.88rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .var-highlight {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+    .snippet-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .action-btns { display: flex; gap: 4px; }
+    .icon-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.72rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .icon-btn:hover { color: var(--text); border-color: var(--muted); }
+    .icon-btn.del:hover { color: #fca5a5; border-color: var(--danger); }
+
+    /* Dynamic Variable Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 50;
+    }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      width: 100%;
+      max-width: 480px;
+    }
+    .modal h2 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+    .field-group { margin-bottom: 10px; }
+    .field-group label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
+    .field-group input {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 0.95rem;
+    }
+    .field-group input:focus { outline: none; border-color: var(--accent); }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1rem; }
+
+    /* Editor & Backup Drawer */
+    details {
+      margin-top: 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+    summary { cursor: pointer; font-weight: 600; font-size: 0.92rem; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 2fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    input.std, textarea.std {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    textarea.std { margin-top: 8px; font-family: inherit; }
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-secondary {
+      background: #3f3f46;
+      color: var(--text);
+    }
+    .btn-secondary:hover { background: #52525b; }
+    .backup-bar {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--success);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      display: none;
+      z-index: 100;
+    }
   </style>
 </head>
 <body>
 
-  <input type="text" id="search" placeholder="Type trigger or keyword (Press Enter to copy top match)..." autofocus>
+  <header>
+    <h1>Quick Snippet Launcher</h1>
+    <div class="hint"><kbd>↑</kbd> <kbd>↓</kbd> navigate &bull; <kbd>Enter</kbd> copy &bull; <kbd>Esc</kbd> clear</div>
+  </header>
+
+  <input type="text" id="search" class="search-box" placeholder="Type trigger, category, or keyword..." autofocus autocomplete="off">
+  <div id="categories" class="categories"></div>
   <div id="list"></div>
 
-  <details>
-    <summary style="cursor:pointer; color:#aaa;">+ Add / Manage Snippets</summary>
-    <div style="margin-top: 10px;">
-      <input type="text" id="newTrigger" placeholder="Short trigger (e.g., tls)">
-      <input type="text" id="newTitle" placeholder="Title (e.g., Total Loss Settlement Note)">
-      <textarea id="newBody" rows="4" placeholder="Snippet text..."></textarea>
-      <button onclick="addSnippet()">Save Snippet</button>
+  <details id="editorDrawer">
+    <summary id="editorSummary">+ Add New Snippet / Manage Backups</summary>
+    <input type="hidden" id="editIndex" value="-1">
+    <div class="form-grid">
+      <input type="text" id="inpTrigger" class="std" placeholder="Trigger (e.g., poa)">
+      <input type="text" id="inpCategory" class="std" placeholder="Category (e.g., Titles)">
+      <input type="text" id="inpTitle" class="std" placeholder="Title (e.g., POA Packet Mailed)">
+    </div>
+    <textarea id="inpBody" class="std" rows="4" placeholder="Snippet text... Use {{Variable}} for prompt fields or {{Today}} for current date."></textarea>
+    <div style="display:flex; gap:8px; margin-top:8px;">
+      <button class="btn" onclick="saveSnippet()">Save Snippet</button>
+      <button class="btn btn-secondary" id="cancelEditBtn" style="display:none;" onclick="resetForm()">Cancel Edit</button>
+    </div>
+
+    <div class="backup-bar">
+      <button class="btn btn-secondary" onclick="exportJSON()">Export JSON Backup</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">Import JSON</button>
+      <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importJSON(event)">
+      <span class="hint">Tip: Export backups regularly in case IT clears browser data.</span>
     </div>
   </details>
+
+  <!-- Variable Fill Modal -->
+  <div id="varModal" class="modal-backdrop">
+    <div class="modal">
+      <h2 id="modalTitle">Fill Template Fields</h2>
+      <form id="varForm" onsubmit="submitVariables(event)">
+        <div id="varFields"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel (Esc)</button>
+          <button type="submit" class="btn">Copy Filled Text (Enter)</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div id="toast" class="toast">Copied to clipboard!</div>
 
   <script>
     const defaultSnippets = [
-      { trigger: 'tls', title: 'Total Loss Settlement', body: 'Reviewed total loss valuation with owner. Settlement figures confirmed and title instructions provided.' },
-      { trigger: 'poa', title: 'POA & Title Packet Sent', body: 'Mailed Power of Attorney and odometer disclosure packet to vehicle owner for signature.' }
+      {
+        trigger: 'tls',
+        category: 'Total Loss',
+        title: 'Total Loss Settlement Reviewed',
+        body: 'Reviewed total loss valuation and settlement breakdown with vehicle owner. Confirmed deductible, taxes/fees, and net payout. Provided title and POA instructions.'
+      },
+      {
+        trigger: 'poa',
+        category: 'Titles',
+        title: 'POA & Title Packet Sent',
+        body: 'Mailed {{State}} Power of Attorney and odometer disclosure packet to {{Recipient}} on {{Today}}. Advised to sign in blue/black ink and return via prepaid envelope.'
+      },
+      {
+        trigger: 'lien',
+        category: 'Titles',
+        title: 'Lienholder Letter of Guarantee',
+        body: 'Contacted {{Lienholder}} to verify payoff quote good through {{PayoffDate}}. Requested Letter of Guarantee and title release confirmation.'
+      },
+      {
+        trigger: 'fup',
+        category: 'Follow-Up',
+        title: 'Outbound Title Follow-Up',
+        body: 'Placed outbound call to owner regarding outstanding title documents. Left voicemail requesting callback to confirm packet receipt.'
+      }
     ];
 
-    let snippets = JSON.parse(localStorage.getItem('work_snippets')) || defaultSnippets;
+    let snippets = JSON.parse(localStorage.getItem('work_snippets_v2')) || defaultSnippets;
+    let activeCategory = 'All';
+    let selectedIndex = 0;
+    let currentFiltered = [];
+    let pendingTemplate = null;
+
     const searchInput = document.getElementById('search');
     const listEl = document.getElementById('list');
+    const catEl = document.getElementById('categories');
+    const modalEl = document.getElementById('varModal');
 
-    // Auto-focus search whenever you switch back to this browser tab/window
+    // Auto-focus search whenever window/tab gains focus
     window.addEventListener('focus', () => {
-      searchInput.focus();
-      searchInput.select();
+      if (modalEl.style.display !== 'flex' && !document.getElementById('editorDrawer').open) {
+        searchInput.focus();
+        searchInput.select();
+      }
     });
 
-    function render(filter = '') {
-      const q = filter.toLowerCase().trim();
-      const filtered = snippets.filter(s =>
-        s.trigger.toLowerCase().includes(q) ||
-        s.title.toLowerCase().includes(q) ||
-        s.body.toLowerCase().includes(q)
-      );
+    function saveToStorage() {
+      localStorage.setItem('work_snippets_v2', JSON.stringify(snippets));
+    }
 
-      listEl.innerHTML = filtered.map((s, idx) => `
-        <div class="snippet ${idx === 0 ? 'active' : ''}" onclick="copyText(${idx}, '${q}')">
+    function renderCategories() {
+      const cats = ['All', ...new Set(snippets.map(s => s.category).filter(Boolean))];
+      if (!cats.includes(activeCategory)) activeCategory = 'All';
+      catEl.innerHTML = cats.map(c => `
+        <button class="cat-pill ${c === activeCategory ? 'active' : ''}" onclick="setCategory('${c.replace(/'/g, "\\'")}')">${c}</button>
+      `).join('');
+    }
+
+    function setCategory(cat) {
+      activeCategory = cat;
+      selectedIndex = 0;
+      render();
+      searchInput.focus();
+    }
+
+    function formatPreview(text) {
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/(\{\{[^}]+\}\})/g, '<span class="var-highlight">$1</span>');
+    }
+
+    function render() {
+      renderCategories();
+      const q = searchInput.value.toLowerCase().trim();
+
+      currentFiltered = snippets
+        .map((s, originalIndex) => ({ ...s, originalIndex }))
+        .filter(s => {
+          const matchesCat = activeCategory === 'All' || s.category === activeCategory;
+          const matchesQuery = !q ||
+            s.trigger.toLowerCase().includes(q) ||
+            (s.category && s.category.toLowerCase().includes(q)) ||
+            s.title.toLowerCase().includes(q) ||
+            s.body.toLowerCase().includes(q);
+          return matchesCat && matchesQuery;
+        });
+
+      if (selectedIndex >= currentFiltered.length) selectedIndex = Math.max(0, currentFiltered.length - 1);
+
+      if (currentFiltered.length === 0) {
+        listEl.innerHTML = `<div style="color:var(--muted); padding:1rem; text-align:center;">No matching snippets. Press <kbd>Esc</kbd> to clear search.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = currentFiltered.map((s, idx) => `
+        <div class="snippet ${idx === selectedIndex ? 'selected' : ''}" onclick="triggerSnippet(${idx})">
           <div>
-            <span class="tag">${s.trigger}</span>
-            <strong>${s.title}</strong>
-            <div style="color:#aaa; font-size:0.85rem; margin-top:4px;">${s.body}</div>
+            <div class="snippet-meta">
+              <span class="tag-trigger">${s.trigger}</span>
+              <strong>${s.title}</strong>
+              ${s.category ? `<span class="tag-cat">${s.category}</span>` : ''}
+            </div>
+            <div class="snippet-body">${formatPreview(s.body)}</div>
           </div>
-          <span style="color:#888; font-size:0.8rem;">${idx === 0 ? '[Enter]' : 'Click'}</span>
+          <div class="snippet-actions" onclick="event.stopPropagation()">
+            <span class="hint">${idx === selectedIndex ? '<kbd>Enter</kbd>' : ''}</span>
+            <div class="action-btns">
+              <button class="icon-btn" onclick="editSnippet(${s.originalIndex})">Edit</button>
+              <button class="icon-btn del" onclick="deleteSnippet(${s.originalIndex})">Del</button>
+            </div>
+          </div>
         </div>
       `).join('');
+    }
 
-      return filtered;
+    function triggerSnippet(filteredIdx) {
+      const item = currentFiltered[filteredIdx];
+      if (!item) return;
+
+      // Replace {{Today}} automatically
+      const todayStr = new Date().toLocaleDateString('en-US');
+      let processedBody = item.body.replace(/\{\{Today\}\}/gi, todayStr);
+
+      // Extract remaining {{Variables}}
+      const matches = [...processedBody.matchAll(/\{\{([^}]+)\}\}/g)];
+      const uniqueVars = [...new Set(matches.map(m => m[1].trim()))];
+
+      if (uniqueVars.length === 0) {
+        copyToClipboard(processedBody);
+      } else {
+        openVariableModal(item.title, processedBody, uniqueVars);
+      }
+    }
+
+    function openVariableModal(title, templateBody, vars) {
+      pendingTemplate = templateBody;
+      document.getElementById('modalTitle').textContent = title;
+      const fieldsContainer = document.getElementById('varFields');
+      fieldsContainer.innerHTML = vars.map((v, i) => `
+        <div class="field-group">
+          <label for="var_${i}">${v}</label>
+          <input type="text" id="var_${i}" data-var="${v}" required autocomplete="off">
+        </div>
+      `).join('');
+      modalEl.style.display = 'flex';
+      setTimeout(() => document.getElementById('var_0').focus(), 20);
+    }
+
+    function closeModal() {
+      modalEl.style.display = 'none';
+      pendingTemplate = null;
+      searchInput.focus();
+    }
+
+    function submitVariables(e) {
+      e.preventDefault();
+      if (!pendingTemplate) return;
+      let finalText = pendingTemplate;
+      const inputs = document.querySelectorAll('#varFields input');
+      inputs.forEach(inp => {
+        const varName = inp.getAttribute('data-var');
+        const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        finalText = finalText.replace(new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`, 'g'), inp.value.trim());
+      });
+      closeModal();
+      copyToClipboard(finalText);
     }
 
     async function copyToClipboard(text) {
       try {
         await navigator.clipboard.writeText(text);
       } catch (err) {
-        // Fallback for restricted enterprise browsers or file:// protocol
         const ta = document.createElement('textarea');
         ta.value = text;
         document.body.appendChild(ta);
@@ -84,38 +488,129 @@
       }
       const toast = document.getElementById('toast');
       toast.style.display = 'block';
-      setTimeout(() => toast.style.display = 'none', 1500);
+      setTimeout(() => toast.style.display = 'none', 1600);
     }
 
-    function copyText(index, query) {
-      const q = query.toLowerCase().trim();
-      const filtered = snippets.filter(s =>
-        s.trigger.toLowerCase().includes(q) ||
-        s.title.toLowerCase().includes(q) ||
-        s.body.toLowerCase().includes(q)
-      );
-      if (filtered[index]) copyToClipboard(filtered[index].body);
-    }
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (modalEl.style.display === 'flex') {
+        if (e.key === 'Escape') closeModal();
+        return;
+      }
+      if (document.activeElement.tagName === 'TEXTAREA' ||
+         (document.activeElement.tagName === 'INPUT' && document.activeElement.id !== 'search')) {
+        return;
+      }
 
-    searchInput.addEventListener('input', (e) => render(e.target.value));
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
-        copyText(0, searchInput.value);
+        if (currentFiltered.length > 0) {
+          selectedIndex = (selectedIndex + 1) % currentFiltered.length;
+          render();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (currentFiltered.length > 0) {
+          selectedIndex = (selectedIndex - 1 + currentFiltered.length) % currentFiltered.length;
+          render();
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        triggerSnippet(selectedIndex);
+      } else if (e.key === 'Escape') {
+        searchInput.value = '';
+        activeCategory = 'All';
+        selectedIndex = 0;
+        render();
+        searchInput.focus();
       }
     });
 
-    function addSnippet() {
-      const trigger = document.getElementById('newTrigger').value.trim();
-      const title = document.getElementById('newTitle').value.trim();
-      const body = document.getElementById('newBody').value.trim();
-      if (!trigger || !body) return;
-      snippets.push({ trigger, title: title || trigger, body });
-      localStorage.setItem('work_snippets', JSON.stringify(snippets));
-      document.getElementById('newTrigger').value = '';
-      document.getElementById('newTitle').value = '';
-      document.getElementById('newBody').value = '';
-      render(searchInput.value);
+    searchInput.addEventListener('input', () => {
+      selectedIndex = 0;
+      render();
+    });
+
+    // CRUD Operations
+    function saveSnippet() {
+      const trigger = document.getElementById('inpTrigger').value.trim();
+      const category = document.getElementById('inpCategory').value.trim() || 'General';
+      const title = document.getElementById('inpTitle').value.trim();
+      const body = document.getElementById('inpBody').value.trim();
+      const editIdx = parseInt(document.getElementById('editIndex').value, 10);
+
+      if (!trigger || !body) return alert('Trigger and Snippet text are required.');
+
+      const entry = { trigger, category, title: title || trigger, body };
+      if (editIdx >= 0) {
+        snippets[editIdx] = entry;
+      } else {
+        snippets.unshift(entry);
+      }
+      saveToStorage();
+      resetForm();
+      render();
+    }
+
+    function editSnippet(idx) {
+      const s = snippets[idx];
+      document.getElementById('editIndex').value = idx;
+      document.getElementById('inpTrigger').value = s.trigger;
+      document.getElementById('inpCategory').value = s.category || '';
+      document.getElementById('inpTitle').value = s.title;
+      document.getElementById('inpBody').value = s.body;
+      document.getElementById('editorSummary').textContent = `Editing: ${s.title}`;
+      document.getElementById('cancelEditBtn').style.display = 'inline-block';
+      document.getElementById('editorDrawer').open = true;
+      document.getElementById('inpTrigger').focus();
+    }
+
+    function deleteSnippet(idx) {
+      if (!confirm(`Delete "${snippets[idx].title}"?`)) return;
+      snippets.splice(idx, 1);
+      saveToStorage();
+      render();
+    }
+
+    function resetForm() {
+      document.getElementById('editIndex').value = '-1';
+      document.getElementById('inpTrigger').value = '';
+      document.getElementById('inpCategory').value = '';
+      document.getElementById('inpTitle').value = '';
+      document.getElementById('inpBody').value = '';
+      document.getElementById('editorSummary').textContent = '+ Add New Snippet / Manage Backups';
+      document.getElementById('cancelEditBtn').style.display = 'none';
+    }
+
+    // JSON Backup & Restore
+    function exportJSON() {
+      const blob = new Blob([JSON.stringify(snippets, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `snippets-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (!Array.isArray(imported)) throw new Error('Invalid format');
+          snippets = imported;
+          saveToStorage();
+          render();
+          alert(`Imported ${snippets.length} snippets successfully.`);
+        } catch (err) {
+          alert('Invalid JSON backup file.');
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
     }
 
     render();
