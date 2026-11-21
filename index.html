@@ -183,7 +183,8 @@
     .modal h2 { margin: 0 0 0.75rem; font-size: 1.05rem; }
     .field-group { margin-bottom: 10px; }
     .field-group label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 4px; }
-    .field-group input {
+    .field-group input,
+    .field-group select {
       width: 100%;
       background: var(--bg);
       color: var(--text);
@@ -192,7 +193,8 @@
       border-radius: 6px;
       font-size: 0.95rem;
     }
-    .field-group input:focus { outline: none; border-color: var(--accent); }
+    .field-group input:focus,
+    .field-group select:focus { outline: none; border-color: var(--accent); }
     .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1rem; }
 
     /* Editor & Backup Drawer */
@@ -220,6 +222,11 @@
       font-size: 0.9rem;
     }
     textarea.std { margin-top: 8px; font-family: inherit; }
+    .syntax-help {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
     .btn {
       background: var(--accent);
       color: #fff;
@@ -282,8 +289,11 @@
       <input type="text" id="inpCategory" class="std" placeholder="Category (e.g., Titles)">
       <input type="text" id="inpTitle" class="std" placeholder="Title (e.g., POA Packet Mailed)">
     </div>
-    <textarea id="inpBody" class="std" rows="4" placeholder="Snippet text... Use {{Variable}} for prompt fields or {{Today}} for current date."></textarea>
-    <div style="display:flex; gap:8px; margin-top:8px;">
+    <textarea id="inpBody" class="std" rows="4" placeholder="Snippet text..."></textarea>
+    <div class="syntax-help">
+      Placeholders: <code>{{Name}}</code> for text input &bull; <code>{{State|AZ,TX,FL,LA}}</code> for dropdown menu &bull; <code>{{Today}}</code> for current date.
+    </div>
+    <div style="display:flex; gap:8px; margin-top:10px;">
       <button class="btn" onclick="saveSnippet()">Save Snippet</button>
       <button class="btn btn-secondary" id="cancelEditBtn" style="display:none;" onclick="resetForm()">Cancel Edit</button>
     </div>
@@ -324,7 +334,7 @@
         trigger: 'poa',
         category: 'Titles',
         title: 'POA & Title Packet Sent',
-        body: 'Mailed {{State}} Power of Attorney and odometer disclosure packet to {{Recipient}} on {{Today}}. Advised to sign in blue/black ink and return via prepaid envelope.'
+        body: 'Mailed {{State|AZ,TX,FL,LA}} Power of Attorney and odometer disclosure packet to {{Recipient|Vehicle Owner,Lienholder,Authorized Rep}} on {{Today}}. Advised to sign in blue/black ink and return via prepaid envelope.'
       },
       {
         trigger: 'lien',
@@ -336,7 +346,7 @@
         trigger: 'fup',
         category: 'Follow-Up',
         title: 'Outbound Title Follow-Up',
-        body: 'Placed outbound call to owner regarding outstanding title documents. Left voicemail requesting callback to confirm packet receipt.'
+        body: 'Placed outbound call to {{Contact|Vehicle Owner,Lienholder,Dealership}} regarding outstanding title documents. Left voicemail requesting callback to confirm packet receipt.'
       }
     ];
 
@@ -363,11 +373,19 @@
       localStorage.setItem('work_snippets_v2', JSON.stringify(snippets));
     }
 
+    function escapeHTML(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     function renderCategories() {
       const cats = ['All', ...new Set(snippets.map(s => s.category).filter(Boolean))];
       if (!cats.includes(activeCategory)) activeCategory = 'All';
       catEl.innerHTML = cats.map(c => `
-        <button class="cat-pill ${c === activeCategory ? 'active' : ''}" onclick="setCategory('${c.replace(/'/g, "\\'")}')">${c}</button>
+        <button class="cat-pill ${c === activeCategory ? 'active' : ''}" onclick="setCategory('${c.replace(/'/g, "\\'")}')">${escapeHTML(c)}</button>
       `).join('');
     }
 
@@ -379,11 +397,7 @@
     }
 
     function formatPreview(text) {
-      return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/(\{\{[^}]+\}\})/g, '<span class="var-highlight">$1</span>');
+      return escapeHTML(text).replace(/(\{\{[^}]+\}\})/g, '<span class="var-highlight">$1</span>');
     }
 
     function render() {
@@ -413,9 +427,9 @@
         <div class="snippet ${idx === selectedIndex ? 'selected' : ''}" onclick="triggerSnippet(${idx})">
           <div>
             <div class="snippet-meta">
-              <span class="tag-trigger">${s.trigger}</span>
-              <strong>${s.title}</strong>
-              ${s.category ? `<span class="tag-cat">${s.category}</span>` : ''}
+              <span class="tag-trigger">${escapeHTML(s.trigger)}</span>
+              <strong>${escapeHTML(s.title)}</strong>
+              ${s.category ? `<span class="tag-cat">${escapeHTML(s.category)}</span>` : ''}
             </div>
             <div class="snippet-body">${formatPreview(s.body)}</div>
           </div>
@@ -439,29 +453,62 @@
 
       // Replace {{Today}} automatically
       const todayStr = new Date().toLocaleDateString('en-US');
-      let processedBody = item.body.replace(/\{\{Today\}\}/gi, todayStr);
+      let processedBody = item.body.replace(/\{\{\s*Today\s*\}\}/gi, todayStr);
 
-      // Extract remaining {{Variables}}
+      // Extract unique {{Token}} definitions (supports {{Label}} and {{Label|Opt1,Opt2}})
       const matches = [...processedBody.matchAll(/\{\{([^}]+)\}\}/g)];
-      const uniqueVars = [...new Set(matches.map(m => m[1].trim()))];
+      const seenTokens = new Set();
+      const fieldDefs = [];
 
-      if (uniqueVars.length === 0) {
+      for (const m of matches) {
+        const rawToken = m[1].trim();
+        if (seenTokens.has(rawToken)) continue;
+        seenTokens.add(rawToken);
+
+        const pipeIdx = rawToken.indexOf('|');
+        if (pipeIdx !== -1) {
+          const label = rawToken.slice(0, pipeIdx).trim();
+          const options = rawToken.slice(pipeIdx + 1).split(',').map(o => o.trim()).filter(Boolean);
+          fieldDefs.push({ rawToken, label, options });
+        } else {
+          fieldDefs.push({ rawToken, label: rawToken, options: null });
+        }
+      }
+
+      if (fieldDefs.length === 0) {
         copyToClipboard(processedBody);
       } else {
-        openVariableModal(item.title, processedBody, uniqueVars);
+        openVariableModal(item.title, processedBody, fieldDefs);
       }
     }
 
-    function openVariableModal(title, templateBody, vars) {
+    function openVariableModal(title, templateBody, fieldDefs) {
       pendingTemplate = templateBody;
       document.getElementById('modalTitle').textContent = title;
       const fieldsContainer = document.getElementById('varFields');
-      fieldsContainer.innerHTML = vars.map((v, i) => `
-        <div class="field-group">
-          <label for="var_${i}">${v}</label>
-          <input type="text" id="var_${i}" data-var="${v}" required autocomplete="off">
-        </div>
-      `).join('');
+
+      fieldsContainer.innerHTML = fieldDefs.map((field, i) => {
+        if (field.options && field.options.length > 0) {
+          const optsHTML = field.options
+            .map(opt => `<option value="${escapeHTML(opt)}">${escapeHTML(opt)}</option>`)
+            .join('');
+          return `
+            <div class="field-group">
+              <label for="var_${i}">${escapeHTML(field.label)}</label>
+              <select id="var_${i}" data-token="${escapeHTML(field.rawToken)}">
+                ${optsHTML}
+              </select>
+            </div>
+          `;
+        }
+        return `
+          <div class="field-group">
+            <label for="var_${i}">${escapeHTML(field.label)}</label>
+            <input type="text" id="var_${i}" data-token="${escapeHTML(field.rawToken)}" required autocomplete="off">
+          </div>
+        `;
+      }).join('');
+
       modalEl.style.display = 'flex';
       setTimeout(() => document.getElementById('var_0').focus(), 20);
     }
@@ -476,11 +523,11 @@
       e.preventDefault();
       if (!pendingTemplate) return;
       let finalText = pendingTemplate;
-      const inputs = document.querySelectorAll('#varFields input');
-      inputs.forEach(inp => {
-        const varName = inp.getAttribute('data-var');
-        const escaped = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        finalText = finalText.replace(new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`, 'g'), inp.value.trim());
+      const controls = document.querySelectorAll('#varFields input, #varFields select');
+      controls.forEach(ctrl => {
+        const rawToken = ctrl.getAttribute('data-token');
+        const escaped = rawToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        finalText = finalText.replace(new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`, 'g'), ctrl.value.trim());
       });
       closeModal();
       copyToClipboard(finalText);
@@ -505,7 +552,13 @@
     // Keyboard navigation & Alt+1..9 quick copy
     document.addEventListener('keydown', (e) => {
       if (modalEl.style.display === 'flex') {
-        if (e.key === 'Escape') closeModal();
+        if (e.key === 'Escape') {
+          closeModal();
+        } else if (e.key === 'Enter' && document.activeElement.tagName === 'SELECT') {
+          // Allow pressing Enter directly while a dropdown select is focused
+          e.preventDefault();
+          document.getElementById('varForm').requestSubmit();
+        }
         return;
       }
 
