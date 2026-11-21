@@ -32,6 +32,8 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 1rem;
+      gap: 12px;
+      flex-wrap: wrap;
     }
     h1 { font-size: 1.2rem; margin: 0; font-weight: 600; color: var(--text); }
     .hint { font-size: 0.8rem; color: var(--muted); }
@@ -106,6 +108,7 @@
       align-items: center;
       gap: 8px;
       margin-bottom: 4px;
+      flex-wrap: wrap;
     }
     .tag-trigger {
       background: var(--accent);
@@ -139,6 +142,11 @@
       align-items: flex-end;
       gap: 6px;
       flex-shrink: 0;
+    }
+    .shortcut-badges {
+      display: flex;
+      gap: 4px;
+      align-items: center;
     }
     .action-btns { display: flex; gap: 4px; }
     .icon-btn {
@@ -259,7 +267,7 @@
 
   <header>
     <h1>Quick Snippet Launcher</h1>
-    <div class="hint"><kbd>↑</kbd> <kbd>↓</kbd> navigate &bull; <kbd>Enter</kbd> copy &bull; <kbd>Esc</kbd> clear</div>
+    <div class="hint"><kbd>Alt+1..9</kbd> instant copy &bull; <kbd>↑</kbd> <kbd>↓</kbd> navigate &bull; <kbd>Enter</kbd> copy &bull; <kbd>Esc</kbd> clear</div>
   </header>
 
   <input type="text" id="search" class="search-box" placeholder="Type trigger, category, or keyword..." autofocus autocomplete="off">
@@ -412,7 +420,10 @@
             <div class="snippet-body">${formatPreview(s.body)}</div>
           </div>
           <div class="snippet-actions" onclick="event.stopPropagation()">
-            <span class="hint">${idx === selectedIndex ? '<kbd>Enter</kbd>' : ''}</span>
+            <div class="shortcut-badges">
+              ${idx < 9 ? `<kbd>Alt+${idx + 1}</kbd>` : ''}
+              ${idx === selectedIndex ? `<kbd>Enter</kbd>` : ''}
+            </div>
             <div class="action-btns">
               <button class="icon-btn" onclick="editSnippet(${s.originalIndex})">Edit</button>
               <button class="icon-btn del" onclick="deleteSnippet(${s.originalIndex})">Del</button>
@@ -491,12 +502,26 @@
       setTimeout(() => toast.style.display = 'none', 1600);
     }
 
-    // Keyboard navigation
+    // Keyboard navigation & Alt+1..9 quick copy
     document.addEventListener('keydown', (e) => {
       if (modalEl.style.display === 'flex') {
         if (e.key === 'Escape') closeModal();
         return;
       }
+
+      // Alt+1 through Alt+9 instant copy (works even while typing in search box)
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const match = e.code.match(/^Digit([1-9])$/);
+        if (match) {
+          const targetIdx = parseInt(match[1], 10) - 1;
+          if (targetIdx < currentFiltered.length) {
+            e.preventDefault();
+            triggerSnippet(targetIdx);
+          }
+          return;
+        }
+      }
+
       if (document.activeElement.tagName === 'TEXTAREA' ||
          (document.activeElement.tagName === 'INPUT' && document.activeElement.id !== 'search')) {
         return;
